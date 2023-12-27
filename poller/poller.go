@@ -7,6 +7,7 @@ import (
 	"github.com/Augiro/a2s-cache/util/packets"
 	"go.uber.org/zap"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -79,21 +80,24 @@ func (p *Poller) execQuery(name string, req []byte, initialCH bool, store func([
 		return fmt.Errorf("unable to dial server over UDP: %w", err)
 	}
 
-	closed := make(chan bool)
+	var closeMU sync.Mutex
+	isClosed := false
 	defer func() {
-		closed <- true
-		err = conn.Close()
-		if err != nil {
-			p.log.Errorf("unable to close UDP connection to server: %v", err)
+		closeMU.Lock()
+		defer closeMU.Unlock()
+		if !isClosed {
+			isClosed = true
+			conn.Close()
 		}
 	}()
 
 	// Timeout in case we don't get any response
 	go func() {
-		select {
-		case <-closed:
-			return
-		case <-time.After(PollTimeout):
+		<-time.After(PollTimeout)
+		closeMU.Lock()
+		defer closeMU.Unlock()
+		if !isClosed {
+			isClosed = true
 			p.log.Errorf("%s poll timed out", name)
 			conn.Close()
 		}
@@ -112,7 +116,7 @@ func (p *Poller) execQuery(name string, req []byte, initialCH bool, store func([
 
 	buf := make([]byte, 1024)
 	n, _, err := conn.ReadFromUDP(buf)
-	if err != nil {
+	if err != nil || n == 0 {
 		return fmt.Errorf("unable to read server over UDP: %w", err)
 	}
 
@@ -126,8 +130,8 @@ func (p *Poller) execQuery(name string, req []byte, initialCH bool, store func([
 	}
 
 	n, _, err = conn.ReadFromUDP(buf)
-	if err != nil {
-		return fmt.Errorf("unable to write to server over UDP: %w", err)
+	if err != nil || n == 0 {
+		return fmt.Errorf("unable to read from server over UDP: %w", err)
 	}
 
 	store(bytes.Clone(buf[:n]))
