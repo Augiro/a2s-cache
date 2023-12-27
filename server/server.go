@@ -131,7 +131,13 @@ func (s *Server) respond(pc net.PacketConn, addr net.Addr, ch Challenge, chMap c
 		return
 	}
 
-	_, err := pc.WriteTo(resp(), addr)
+	// If we populated cache yet, drop packet.
+	r := resp()
+	if r == nil {
+		return
+	}
+
+	_, err := pc.WriteTo(r, addr)
 	if err != nil {
 		s.log.Errorf("unable to send response: %v", err)
 	}

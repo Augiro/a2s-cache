@@ -30,22 +30,19 @@ func New(log *zap.SugaredLogger, ip string, port int, cache Cache) *Poller {
 	}
 }
 
-func (p *Poller) Start(ctx context.Context, initialPoll chan error) error {
+func (p *Poller) Start(ctx context.Context) {
 	// Do one initial poll straight away.
 	err := p.poll()
 	if err != nil {
-		iErr := fmt.Errorf("unable to poll server: %w", err)
-		initialPoll <- iErr
-		return iErr
+		p.log.Errorf("poll failed: %v", err)
 	}
-	initialPoll <- nil
 
 	ticker := time.NewTicker(10 * time.Second)
 	p.log.Info("started poller successfully")
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case <-ticker.C:
 			err = p.poll()
 			if err != nil {

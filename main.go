@@ -41,21 +41,14 @@ func main() {
 
 	// Setup & start the poller.
 	p := poller.New(log, *gIP, *gPort, c)
-	initialPoll := make(chan error)
-	group.Go(func() error { return p.Start(ctx, initialPoll) })
-
-	// Wait for the first poll before proceeding.
-	err := <-initialPoll
-	if err != nil {
-		panic(err)
-	}
+	group.Go(func() error { p.Start(ctx); return nil })
 
 	// Setup & start the UDP server.
 	s := server.New(log, *host, *port, c)
 	group.Go(func() error { return s.Start(ctx) })
 
 	// Panic if any of the goroutines in the group fail.
-	err = group.Wait()
+	err := group.Wait()
 	if err != nil {
 		panic(err)
 	}
