@@ -49,6 +49,7 @@ func (c *ChallengeMap) Start(ctx context.Context) {
 	}
 }
 
+// cleanup checks for and removes any expired challenges.
 func (c *ChallengeMap) cleanup() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
