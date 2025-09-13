@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"flag"
+
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/Augiro/a2s-cache/cache"
 	"github.com/Augiro/a2s-cache/poller"
 	"github.com/Augiro/a2s-cache/server"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 func setupLogger(debug bool) *zap.SugaredLogger {
