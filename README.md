@@ -101,16 +101,9 @@ table ip nat {
 
 ### iptables
 
-For older systems that still use `iptables`, you can use the following commands to achieve the same result:
+If you still wish to use iptables, you can refer to the instructions in the README for [SourceEngineQueryCacher](https://github.com/hyperxpro/SourceEngineQueryCacher),
+as the firewall configuration should be identical (just make sure you use the same port).
 
-```bash
-# Redirect A2S queries to the cache server
-iptables -t nat -A PREROUTING -p udp --dport 27015 -m u32 --u32 "0>>22&0x3C@4=0xFFFFFFFF" -j REDIRECT --to-port 9000
-
-# Forward other traffic to the game server
-iptables -t nat -A PREROUTING -p udp --dport 27015 -j DNAT --to-destination 10.0.0.2:27015
-iptables -t nat -A PREROUTING -p udp --dport 27005 -j DNAT --to-destination 10.0.0.2:27005
-```
 
 ## Contributing
 
