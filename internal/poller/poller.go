@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/Augiro/a2s-cache/util/packets"
+	"github.com/Augiro/a2s-cache/internal/util/packets"
 	"go.uber.org/zap"
 	"net"
 	"sync"

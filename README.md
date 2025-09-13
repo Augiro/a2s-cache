@@ -13,7 +13,7 @@ The primary motivation for this project was to create a simple, efficient soluti
 To build the project, you will need to have [Go](https://go.dev/) installed. Once Go is installed, you can build the project using the following command:
 
 ```bash
-go build -o a2s-cache .
+go build -o a2s-cache ./cmd/a2s-cache
 ```
 
 This will produce a binary named `a2s-cache` in the current directory.

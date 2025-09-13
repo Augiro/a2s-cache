@@ -7,9 +7,9 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/Augiro/a2s-cache/cache"
-	"github.com/Augiro/a2s-cache/poller"
-	"github.com/Augiro/a2s-cache/server"
+	"github.com/Augiro/a2s-cache/internal/cache"
+	"github.com/Augiro/a2s-cache/internal/poller"
+	"github.com/Augiro/a2s-cache/internal/server"
 )
 
 func setupLogger(debug bool) *zap.SugaredLogger {
