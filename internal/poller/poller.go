@@ -7,7 +7,6 @@ import (
 	"github.com/Augiro/a2s-cache/internal/util/packets"
 	"go.uber.org/zap"
 	"net"
-	"sync"
 	"time"
 )
 
@@ -54,11 +53,22 @@ func (p *Poller) Start(ctx context.Context) {
 }
 
 func (p *Poller) poll() error {
-	err := p.execQuery("A2S_INFO", packets.A2SInfoReq, false, p.cache.SetInfoResponse)
+	udpAddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", p.ip, p.port))
+	if err != nil {
+		return fmt.Errorf("unable to resolve game server address: %w", err)
+	}
+
+	conn, err := net.DialUDP("udp4", nil, udpAddr)
+	if err != nil {
+		return fmt.Errorf("unable to dial server over UDP: %w", err)
+	}
+	defer conn.Close()
+
+	err = p.execQuery(conn, "A2S_INFO", packets.A2SInfoReq, false, p.cache.SetInfoResponse)
 	if err != nil {
 		return fmt.Errorf("A2S_INFO poll failed: %w", err)
 	}
-	err = p.execQuery("A2S_PLAYER", packets.A2SPlayerReq, true, p.cache.SetPlayersResponse)
+	err = p.execQuery(conn, "A2S_PLAYER", packets.A2SPlayerReq, true, p.cache.SetPlayersResponse)
 	if err != nil {
 		return fmt.Errorf("A2S_PLAYER poll failed: %w", err)
 	}
@@ -67,41 +77,13 @@ func (p *Poller) poll() error {
 
 // execQuery executes a server query based on the req parameter, and passes the response to the store function.
 // If initiaCH is true, we will append 0xffffffff to req, as is necessary for some queries.
-func (p *Poller) execQuery(name string, req []byte, initialCH bool, store func([]byte)) error {
+func (p *Poller) execQuery(conn *net.UDPConn, name string, req []byte, initialCH bool, store func([]byte)) error {
 	p.log.Debugf("polling %s from server...", name)
 
-	udpAddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", p.ip, p.port))
+	err := conn.SetDeadline(time.Now().Add(PollTimeout))
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("unable to set deadline: %w", err)
 	}
-
-	conn, err := net.DialUDP("udp4", nil, udpAddr)
-	if err != nil {
-		return fmt.Errorf("unable to dial server over UDP: %w", err)
-	}
-
-	var closeMU sync.Mutex
-	isClosed := false
-	defer func() {
-		closeMU.Lock()
-		defer closeMU.Unlock()
-		if !isClosed {
-			isClosed = true
-			conn.Close()
-		}
-	}()
-
-	// Timeout in case we don't get any response
-	go func() {
-		<-time.After(PollTimeout)
-		closeMU.Lock()
-		defer closeMU.Unlock()
-		if !isClosed {
-			isClosed = true
-			p.log.Errorf("%s poll timed out", name)
-			conn.Close()
-		}
-	}()
 
 	// A2S_PLAYER needs to send 0xffffffff as challenge, if we want to get a challenge response
 	// (gotta love inconsistent APIs).
@@ -116,12 +98,16 @@ func (p *Poller) execQuery(name string, req []byte, initialCH bool, store func([
 
 	buf := make([]byte, 1024)
 	n, _, err := conn.ReadFromUDP(buf)
-	if err != nil || n == 0 {
+	if err != nil {
 		return fmt.Errorf("unable to read server over UDP: %w", err)
 	}
 
+	if n == 0 {
+		return fmt.Errorf("received empty response from server")
+	}
+
 	if !bytes.Equal(buf[:5], packets.ChallengeResp) {
-		return fmt.Errorf("did not get ChallengeResp from server: %w", err)
+		return fmt.Errorf("did not get ChallengeResp from server (got %x)", buf[:5])
 	}
 
 	_, err = conn.Write(append(req, buf[5:n]...))
@@ -130,8 +116,12 @@ func (p *Poller) execQuery(name string, req []byte, initialCH bool, store func([
 	}
 
 	n, _, err = conn.ReadFromUDP(buf)
-	if err != nil || n == 0 {
+	if err != nil {
 		return fmt.Errorf("unable to read from server over UDP: %w", err)
+	}
+
+	if n == 0 {
+		return fmt.Errorf("received empty response from server")
 	}
 
 	store(bytes.Clone(buf[:n]))

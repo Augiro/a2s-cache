@@ -21,24 +21,28 @@ func (c Challenge) Copy() Challenge {
 	return bytes.Clone(c)
 }
 
+type challengeEntry struct {
+	challenge Challenge
+	createdAt time.Time
+}
+
 type ChallengeMap struct {
 	log        *zap.SugaredLogger
 	mu         sync.Mutex
-	challenges map[string]Challenge
-	chTimes    map[string]time.Time
+	challenges map[string]challengeEntry
 }
 
 func NewChallengeMap(log *zap.SugaredLogger) *ChallengeMap {
 	return &ChallengeMap{
 		log:        log,
 		mu:         sync.Mutex{},
-		challenges: make(map[string]Challenge),
-		chTimes:    make(map[string]time.Time),
+		challenges: make(map[string]challengeEntry),
 	}
 }
 
 func (c *ChallengeMap) Start(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -55,19 +59,13 @@ func (c *ChallengeMap) cleanup() {
 	defer c.mu.Unlock()
 
 	now := time.Now()
-	var toBeRemoved []string
 
 	// Collect every key that has expired.
-	for key, t := range c.chTimes {
+	for key, entry := range c.challenges {
 		// Check if challenge expired, and if so remove it.
-		if now.After(t.Add(challengeTTL)) {
-			toBeRemoved = append(toBeRemoved, key)
+		if now.After(entry.createdAt.Add(challengeTTL)) {
+			delete(c.challenges, key)
 		}
-	}
-
-	// Remove everything that expired.
-	for _, key := range toBeRemoved {
-		c.remove(key)
 	}
 }
 
@@ -76,8 +74,10 @@ func (c *ChallengeMap) AddChallenge(key string) Challenge {
 	defer c.mu.Unlock()
 
 	ch := c.genChallenge()
-	c.challenges[key] = ch
-	c.chTimes[key] = time.Now()
+	c.challenges[key] = challengeEntry{
+		challenge: ch,
+		createdAt: time.Now(),
+	}
 
 	return ch.Copy()
 }
@@ -86,19 +86,14 @@ func (c *ChallengeMap) Validate(key string, ch Challenge) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	actualCH, exists := c.challenges[key]
-	if !exists || !actualCH.Equals(ch) {
+	entry, exists := c.challenges[key]
+	if !exists || !entry.challenge.Equals(ch) {
 		return false
 	}
 
 	// Challenge was valid, remove before returning true.
-	c.remove(key)
-	return true
-}
-
-func (c *ChallengeMap) remove(key string) {
 	delete(c.challenges, key)
-	delete(c.chTimes, key)
+	return true
 }
 
 func (c *ChallengeMap) genChallenge() Challenge {

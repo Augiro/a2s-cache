@@ -8,58 +8,48 @@ import (
 )
 
 func Test_cleanup(t *testing.T) {
-	test := func(name string, beforeCH, expectedCH map[string]Challenge, beforeTTL, expectedTTL map[string]time.Time) {
+	test := func(name string, before, expected map[string]challengeEntry) {
 		t.Run(name, func(t0 *testing.T) {
 			c := NewChallengeMap(zap.NewNop().Sugar())
-			c.challenges = beforeCH
-			c.chTimes = beforeTTL
+			c.challenges = before
 
 			c.cleanup()
 
-			assert.Equal(t0, expectedCH, c.challenges)
-			for key, _ := range c.chTimes {
-				_, exists := expectedTTL[key]
-				assert.True(t0, exists)
-			}
+			assert.Equal(t0, expected, c.challenges)
 		})
 	}
 
 	now := time.Now()
 	test(
 		"should not remove challenges that haven't expired",
-		map[string]Challenge{"a": []byte{0x0, 0x1, 0x2, 0x3}},
-		map[string]Challenge{"a": []byte{0x0, 0x1, 0x2, 0x3}},
-		map[string]time.Time{"a": now},
-		map[string]time.Time{"a": now},
+		map[string]challengeEntry{"a": {challenge: []byte{0x0, 0x1, 0x2, 0x3}, createdAt: now}},
+		map[string]challengeEntry{"a": {challenge: []byte{0x0, 0x1, 0x2, 0x3}, createdAt: now}},
 	)
 
 	test(
 		"should remove challenges that have expired",
-		map[string]Challenge{"a": []byte{0x0, 0x1, 0x2, 0x3}},
-		map[string]Challenge{},
-		map[string]time.Time{"a": time.Now().Add(-time.Hour)},
-		map[string]time.Time{},
+		map[string]challengeEntry{"a": {challenge: []byte{0x0, 0x1, 0x2, 0x3}, createdAt: now.Add(-time.Hour)}},
+		map[string]challengeEntry{},
 	)
 }
 
 func Test_AddChallenge(t *testing.T) {
-	t.Run("should generate, add to internal maps and return copy of challenge", func(t0 *testing.T) {
+	t.Run("should generate, add to internal map and return copy of challenge", func(t0 *testing.T) {
 		c := NewChallengeMap(zap.NewNop().Sugar())
 		key := "test"
 
 		chCopy := c.AddChallenge(key)
 
 		// Verify that the challenge exists
-		ch, exists := c.challenges[key]
+		entry, exists := c.challenges[key]
 		assert.True(t0, exists)
 
 		// Verify that we set the challenge time.
-		t := c.chTimes[key]
-		assert.True(t0, t.After(time.Now().Add(-10*time.Second)))
+		assert.True(t0, entry.createdAt.After(time.Now().Add(-10*time.Second)))
 
 		// Alter the returned challenge, verify we did not change the original.
 		chCopy[1] = 0xf2
-		assert.NotEqual(t0, ch, chCopy)
+		assert.NotEqual(t0, entry.challenge, chCopy)
 	})
 }
 
@@ -84,11 +74,8 @@ func Test_Validate(t *testing.T) {
 		isValid := c.Validate(key, ch)
 		assert.True(t0, isValid)
 
-		// Verify the challenge was removed from both maps.
+		// Verify the challenge was removed from the map.
 		_, exists := c.challenges[key]
-		assert.False(t0, exists)
-
-		_, exists = c.chTimes[key]
 		assert.False(t0, exists)
 	})
 }

@@ -28,13 +28,15 @@ The server can be run as follows:
 
 The following command-line flags are available:
 
-| Flag       | Description                      | Default     |
-|------------|----------------------------------|-------------|
-| `debug`    | Enable debug logs                | `false`     |
-| `gameIP`   | IP address of the game server    | `1.2.3.4`   |
-| `gamePort` | Port of the game server          | `27015`     |
-| `ip`       | IP address for the UDP server to listen on | `127.0.0.1` |
-| `port`     | Port for the UDP server to listen on | `9000`      |
+| Flag              | Description                                | Default     |
+|-------------------|--------------------------------------------|-------------|
+| `debug`           | Enable debug logs                          | `false`     |
+| `gameIP`          | IP address of the game server              | `1.2.3.4`   |
+| `gamePort`        | Port of the game server                    | `27015`     |
+| `ip`              | IP address for the UDP server to listen on | `127.0.0.1` |
+| `port`            | Port for the UDP server to listen on       | `9000`      |
+| `ratelimit-rate`  | Rate limit (requests per second)           | `10`        |
+| `ratelimit-burst` | Max requests in a burst                    | `20`        |
 
 ### Example
 

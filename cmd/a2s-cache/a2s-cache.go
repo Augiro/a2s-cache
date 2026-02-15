@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"flag"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -31,12 +34,17 @@ func main() {
 	gPort := flag.Int("gamePort", 27015, "port for the game server")
 	host := flag.String("ip", "127.0.0.1", "IP that UDP server should listen on")
 	port := flag.Int("port", 9000, "port UDP server should listen on")
+	rlRate := flag.Float64("ratelimit-rate", 10, "ratelimit rate (requests per second)")
+	rlBurst := flag.Int("ratelimit-burst", 20, "ratelimit burst (max requests in a burst)")
 	flag.Parse()
 
 	log := setupLogger(*debug)
 	defer log.Sync()
 
-	group, ctx := errgroup.WithContext(context.Background())
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	group, ctx := errgroup.WithContext(ctx)
 
 	// Set up the cache.
 	c := cache.New()
@@ -46,7 +54,7 @@ func main() {
 	group.Go(func() error { p.Start(ctx); return nil })
 
 	// Setup & start the UDP server.
-	s := server.New(log, *host, *port, c)
+	s := server.New(log, *host, *port, c, *rlRate, *rlBurst)
 	group.Go(func() error { return s.Start(ctx) })
 
 	// Panic if any of the goroutines in the group fail.

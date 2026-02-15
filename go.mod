@@ -4,8 +4,8 @@ go 1.25.1
 
 require (
 	github.com/stretchr/testify v1.8.4
-	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.17.0
+	go.uber.org/zap v1.27.1
+	golang.org/x/sync v0.19.0
 )
 
 require (

@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/Augiro/a2s-cache/internal/util/packets"
+	"github.com/Augiro/a2s-cache/internal/server/ratelimit"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"net"
+	"time"
 )
 
 type challengeMap interface {
@@ -27,16 +29,18 @@ type Server struct {
 	port        int
 	chMapInfo   challengeMap
 	chMapPlayer challengeMap
+	limiter     *ratelimit.Limiter
 	cache       Cache
 }
 
-func New(log *zap.SugaredLogger, ip string, port int, cache Cache) *Server {
+func New(log *zap.SugaredLogger, ip string, port int, cache Cache, rate float64, burst int) *Server {
 	return &Server{
 		log,
 		ip,
 		port,
 		NewChallengeMap(log),
 		NewChallengeMap(log),
+		ratelimit.New(rate, burst),
 		cache,
 	}
 }
@@ -52,6 +56,18 @@ func (s *Server) Start(ctx context.Context) error {
 	group, innerCTX := errgroup.WithContext(ctx)
 	group.Go(func() error { s.chMapInfo.Start(innerCTX); return nil })
 	group.Go(func() error { s.chMapPlayer.Start(innerCTX); return nil })
+	group.Go(func() error {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-innerCTX.Done():
+				return nil
+			case <-ticker.C:
+				s.limiter.Cleanup()
+			}
+		}
+	})
 	group.Go(func() error { return s.serve(pc) })
 
 	// Shut down when context closes
@@ -86,6 +102,12 @@ func (s *Server) serve(pc net.PacketConn) error {
 			return err
 		}
 
+		host, _, _ := net.SplitHostPort(addr.String())
+		if !s.limiter.Allow(host) {
+			s.log.Debugf("rate limit exceeded for %s", host)
+			continue
+		}
+
 		// Check if A2S_INFO request without challenge
 		if n == 25 && bytes.Equal(buf[:n], packets.A2SInfoReq) {
 			s.log.Debug("A2S_INFO request received")
@@ -96,7 +118,9 @@ func (s *Server) serve(pc net.PacketConn) error {
 		// Check if A2S_INFO request with challenge
 		if n == 29 && bytes.Equal(buf[:25], packets.A2SInfoReq) {
 			s.log.Debug("A2S_INFO request with challenge received")
-			go s.respond(pc, addr, bytes.Clone(buf[25:n]), s.chMapInfo, s.cache.InfoResponse)
+			challenge := make([]byte, 4)
+			copy(challenge, buf[25:n])
+			go s.respond(pc, addr, challenge, s.chMapInfo, s.cache.InfoResponse)
 			continue
 		}
 
@@ -109,7 +133,9 @@ func (s *Server) serve(pc net.PacketConn) error {
 			}
 
 			s.log.Debug("A2S_PLAYER request received")
-			go s.respond(pc, addr, bytes.Clone(buf[5:n]), s.chMapPlayer, s.cache.PlayersResponse)
+			challenge := make([]byte, 4)
+			copy(challenge, buf[5:n])
+			go s.respond(pc, addr, challenge, s.chMapPlayer, s.cache.PlayersResponse)
 			continue
 		}
 
