@@ -1,3 +1,5 @@
+
+
 # A2S-Cache: Source Engine Query Cache in Go
 
 A lightweight, high-performance caching server for [A2S queries](https://developer.valvesoftware.com/wiki/Server_queries) used by Source Engine games. Written in Go, this project provides a memory-efficient alternative to solutions like [SourceEngineQueryCacher](https://github.com/hyperxpro/SourceEngineQueryCacher), which is ideal for resource-constrained environments like small VPS instances.
@@ -113,4 +115,4 @@ Contributions are welcome! If you find a bug or have a feature request, please o
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+This project is licensed under the MIT License. See the [LICENSE.md](LICENSE.md) file for more details.
